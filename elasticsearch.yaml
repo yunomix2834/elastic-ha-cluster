@@ -1,0 +1,67 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: es-ha
+  namespace: elastic
+spec:
+  version: 8.12.2
+
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+
+  nodeSets:
+    - name: default
+      count: 3
+      config:
+        cluster.routing.allocation.awareness.attributes: k8s_node
+        node.attr.k8s_node: ${NODE_NAME}
+        node.store.allow_mmap: false
+        xpack.ml.enabled: false
+      podTemplate:
+        metadata:
+          labels:
+            app: es-ha
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "1"
+                  memory: "1500Mi"
+              env:
+                - name: ES_JAVA_OPTS
+                  value: "-Xms512m -Xmx512m"
+                - name: NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+          affinity:
+            podAntiAffinity:
+#              Các node trên các host khác nhau
+#              requiredDuringSchedulingIgnoredDuringExecution:
+#                - labelSelector:
+#                    matchLabels:
+#                      elasticsearch.k8s.elastic.co/cluster-name: es-ha
+#                  topologyKey: kubernetes.io/hostname
+#             Test demo dựng trên 1 host
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchLabels:
+                        elasticsearch.k8s.elastic.co/cluster-name: es-ha
+                    topologyKey: kubernetes.io/hostname
+
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 20Gi

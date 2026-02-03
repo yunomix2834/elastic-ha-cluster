@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-ha-lb
+  namespace: elastic
+spec:
+  type: LoadBalancer
+  selector:
+    elasticsearch.k8s.elastic.co/cluster-name: es-ha
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-ha-lb
+  namespace: elastic
+spec:
+  type: LoadBalancer
+  selector:
+    kibana.k8s.elastic.co/name: kb-ha
+  ports:
+    - name: http
+      port: 5601
+      targetPort: 5601
