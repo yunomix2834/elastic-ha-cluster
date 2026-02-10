@@ -1,0 +1,213 @@
+name: elastic_search_ha_proxy
+services:
+  # Masters
+  master-1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: master-1
+    environment:
+      - cluster.name=es-ha
+      - node.name=master-1
+      - node.roles=master
+      - discovery.seed_hosts=master-1,master-2,vote-1
+      - cluster.initial_master_nodes=master-1,master-2,vote-1
+
+      # Disable Security
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - master1-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
+  master-2:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: master-2
+    environment:
+      - cluster.name=es-ha
+      - node.name=master-2
+      - node.roles=master
+      - discovery.seed_hosts=master-1,master-2,vote-1
+      - cluster.initial_master_nodes=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - master2-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
+  # Voting - Only
+  vote-1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: vote-1
+    environment:
+      - cluster.name=es-ha
+      - node.name=vote-1
+      - node.roles=master,voting_only
+      - discovery.seed_hosts=master-1,master-2,vote-1
+      - cluster.initial_master_nodes=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - vote1-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
+  # Data nodes
+  data-1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: data-1
+    environment:
+      - cluster.name=es-ha
+      - node.name=data-1
+      - node.roles=data,ingest
+      - discovery.seed_hosts=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms768m -Xmx768m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - data1-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
+  data-2:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: data-2
+    environment:
+      - cluster.name=es-ha
+      - node.name=data-2
+      - node.roles=data,ingest
+      - discovery.seed_hosts=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms768m -Xmx768m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - data2-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
+  data-3:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: data-3
+    environment:
+      - cluster.name=es-ha
+      - node.name=data-3
+      - node.roles=data,ingest
+      - discovery.seed_hosts=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms768m -Xmx768m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - data3-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
+  # Coordinate - Only
+  coord-1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: coord-1
+    environment:
+      - cluster.name=es-ha
+      - node.name=coord-1
+      - node.roles=[]
+      - discovery.seed_hosts=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    networks: [ esnet ]
+
+  coord-2:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: coord-2
+    environment:
+      - cluster.name=es-ha
+      - node.name=coord-2
+      - node.roles=[]
+      - discovery.seed_hosts=master-1,master-2,vote-1
+
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    networks: [ esnet ]
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    container_name: kibana
+    environment:
+      - SERVER_NAME=kibana
+      - ELASTICSEARCH_HOSTS=http://haproxy:9200
+      # vì ES đã tắt security nên không cần user/pass
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "15601:5601"
+    depends_on:
+      - haproxy
+    networks: [ esnet ]
+
+  # HAProxy
+  haproxy:
+    image: haproxy:2.9
+    container_name: haproxy
+    ports:
+      - "19200:9200"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - coord-1
+      - coord-2
+    networks: [ esnet ]
+
+networks:
+  esnet:
+    driver: bridge
+
+volumes:
+  master1-data:
+  master2-data:
+  vote1-data:
+  data1-data:
+  data2-data:
+  data3-data:
