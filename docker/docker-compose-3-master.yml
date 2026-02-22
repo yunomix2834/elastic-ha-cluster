@@ -1,7 +1,5 @@
-# docker-compose.yml
 name: elastic_search_ha_proxy
 services:
-  # Masters
   master-1:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
     container_name: master-1
@@ -9,8 +7,8 @@ services:
       - cluster.name=es-ha
       - node.name=master-1
       - node.roles=master
-      - discovery.seed_hosts=master-1,master-2
-      - cluster.initial_master_nodes=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
+      - cluster.initial_master_nodes=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -29,8 +27,8 @@ services:
       - cluster.name=es-ha
       - node.name=master-2
       - node.roles=master
-      - discovery.seed_hosts=master-1,master-2
-      - cluster.initial_master_nodes=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
+      - cluster.initial_master_nodes=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -42,6 +40,26 @@ services:
       - master2-data:/usr/share/elasticsearch/data
     networks: [ esnet ]
 
+  master-3:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: master-3
+    environment:
+      - cluster.name=es-ha
+      - node.name=master-3
+      - node.roles=master
+      - discovery.seed_hosts=master-1,master-2,master-3
+      - cluster.initial_master_nodes=master-1,master-2,master-3
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - node.store.allow_mmap=false
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - master3-data:/usr/share/elasticsearch/data
+    networks: [ esnet ]
+
   # Data nodes
   data-1:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
@@ -50,7 +68,7 @@ services:
       - cluster.name=es-ha
       - node.name=data-1
       - node.roles=data,ingest
-      - discovery.seed_hosts=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -69,7 +87,7 @@ services:
       - cluster.name=es-ha
       - node.name=data-2
       - node.roles=data,ingest
-      - discovery.seed_hosts=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -88,7 +106,7 @@ services:
       - cluster.name=es-ha
       - node.name=data-3
       - node.roles=data,ingest
-      - discovery.seed_hosts=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -108,7 +126,7 @@ services:
       - cluster.name=es-ha
       - node.name=coord-1
       - node.roles=[]
-      - discovery.seed_hosts=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -125,7 +143,7 @@ services:
       - cluster.name=es-ha
       - node.name=coord-2
       - node.roles=[]
-      - discovery.seed_hosts=master-1,master-2
+      - discovery.seed_hosts=master-1,master-2,master-3
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
@@ -169,6 +187,7 @@ networks:
 volumes:
   master1-data:
   master2-data:
+  master3-data:
   data1-data:
   data2-data:
   data3-data:
