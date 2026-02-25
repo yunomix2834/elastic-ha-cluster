@@ -1,0 +1,396 @@
+name: elastic_search_ha_proxy
+
+services:
+  setup-certs:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: setup-certs
+    user: "0"
+    restart: "no"
+    command: |
+      bash -c '
+        set -euo pipefail
+        CERTS_DIR=/usr/share/elasticsearch/config/certs
+        CA_ZIP="$$CERTS_DIR/ca.zip"
+        CERTS_ZIP="$$CERTS_DIR/certs.zip"
+
+        mkdir -p "$$CERTS_DIR"
+        cd "$$CERTS_DIR"
+
+        # cleanup zip rác từ lần chạy fail trước (nếu có)
+        rm -f "$$CA_ZIP" "$$CERTS_ZIP"
+
+        if [ ! -f ca/ca.crt ]; then
+          echo "[setup-certs] Generating CA..."
+          mkdir -p ca
+
+          /usr/share/elasticsearch/bin/elasticsearch-certutil ca \
+            --silent --pem \
+            -out "$$CA_ZIP"
+
+          test -f "$$CA_ZIP"
+          unzip -o "$$CA_ZIP" -d ca_tmp
+          cp ca_tmp/ca/ca.crt ca/ca.crt
+          cp ca_tmp/ca/ca.key ca/ca.key
+          rm -rf ca_tmp "$$CA_ZIP"
+        else
+          echo "[setup-certs] CA already exists, skipping."
+        fi
+
+        if [ ! -f master-1/master-1.crt ]; then
+          echo "[setup-certs] Generating node certs from /tmp/instances.yml ..."
+
+          /usr/share/elasticsearch/bin/elasticsearch-certutil cert \
+            --silent --pem \
+            --in /tmp/instances.yml \
+            --ca-cert "$$CERTS_DIR/ca/ca.crt" \
+            --ca-key "$$CERTS_DIR/ca/ca.key" \
+            -out "$$CERTS_ZIP"
+
+          test -f "$$CERTS_ZIP"
+          unzip -o "$$CERTS_ZIP" -d .
+          rm -f "$$CERTS_ZIP"
+        else
+          echo "[setup-certs] Node certs already exist, skipping."
+        fi
+
+        chown -R 1000:0 "$$CERTS_DIR"
+        find "$$CERTS_DIR" -type d -exec chmod 750 {} \;
+        find "$$CERTS_DIR" -type f -exec chmod 640 {} \;
+
+        echo "[setup-certs] Done."
+      '
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - ./certs/instances.yml:/tmp/instances.yml:ro
+    networks: [ esnet ]
+
+  setup-passwords:
+    image: curlimages/curl:8.6.0
+    container_name: setup-passwords
+    user: "0"
+    restart: "no"
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+      master-1:
+        condition: service_started
+      master-2:
+        condition: service_started
+      master-3:
+        condition: service_started
+      coord-1:
+        condition: service_started
+      coord-2:
+        condition: service_started
+      haproxy-1:
+        condition: service_started
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD}
+    volumes:
+      - certs:/certs:ro
+    command: >
+      sh -c '
+        set -eu
+
+        echo "[setup-passwords] Waiting for Elasticsearch via HAProxy..."
+        until curl -sS --cacert /certs/ca/ca.crt \
+          -u elastic:"$$ELASTIC_PASSWORD" \
+          https://haproxy-1:9200/_security/_authenticate >/dev/null; do
+          echo "[setup-passwords] ES not ready yet..."
+          sleep 5
+        done
+
+        echo "[setup-passwords] Setting kibana_system password..."
+        curl -sS --fail --cacert /certs/ca/ca.crt \
+          -u elastic:"$$ELASTIC_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -X POST https://haproxy-1:9200/_security/user/kibana_system/_password \
+          -d "{\"password\":\"$$KIBANA_SYSTEM_PASSWORD\"}"
+
+        echo
+        echo "[setup-passwords] Done."
+      '
+    networks: [ esnet ]
+
+  # =========================
+  # MASTER NODES
+  # =========================
+  master-1:
+    extends:
+      file: ./compose.templates.yml
+      service: es-master-template
+    container_name: master-1
+    environment:
+      node.name: master-1
+      cluster.initial_master_nodes: master-1,master-2,master-3
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/master-1/master-1.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/master-1/master-1.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/master-1/master-1.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/master-1/master-1.key
+    volumes:
+      - master1-data:/usr/share/elasticsearch/data
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  master-2:
+    extends:
+      file: ./compose.templates.yml
+      service: es-master-template
+    container_name: master-2
+    environment:
+      node.name: master-2
+      cluster.initial_master_nodes: master-1,master-2,master-3
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/master-2/master-2.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/master-2/master-2.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/master-2/master-2.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/master-2/master-2.key
+    volumes:
+      - master2-data:/usr/share/elasticsearch/data
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  master-3:
+    extends:
+      file: ./compose.templates.yml
+      service: es-master-template
+    container_name: master-3
+    environment:
+      node.name: master-3
+      cluster.initial_master_nodes: master-1,master-2,master-3
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/master-3/master-3.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/master-3/master-3.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/master-3/master-3.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/master-3/master-3.key
+    volumes:
+      - master3-data:/usr/share/elasticsearch/data
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  # =========================
+  # DATA NODES
+  # =========================
+  data-1:
+    extends:
+      file: ./compose.templates.yml
+      service: es-data-template
+    container_name: data-1
+    environment:
+      node.name: data-1
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/data-1/data-1.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/data-1/data-1.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/data-1/data-1.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/data-1/data-1.key
+    volumes:
+      - data1-data:/usr/share/elasticsearch/data
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  data-2:
+    extends:
+      file: ./compose.templates.yml
+      service: es-data-template
+    container_name: data-2
+    environment:
+      node.name: data-2
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/data-2/data-2.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/data-2/data-2.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/data-2/data-2.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/data-2/data-2.key
+    volumes:
+      - data2-data:/usr/share/elasticsearch/data
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  data-3:
+    extends:
+      file: ./compose.templates.yml
+      service: es-data-template
+    container_name: data-3
+    environment:
+      node.name: data-3
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/data-3/data-3.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/data-3/data-3.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/data-3/data-3.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/data-3/data-3.key
+    volumes:
+      - data3-data:/usr/share/elasticsearch/data
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  # =========================
+  # COORDINATING-ONLY NODES
+  # =========================
+  coord-1:
+    extends:
+      file: ./compose.templates.yml
+      service: es-coord-template
+    container_name: coord-1
+    environment:
+      node.name: coord-1
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-1/coord-1.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/coord-1/coord-1.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-1/coord-1.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/coord-1/coord-1.key
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  coord-2:
+    extends:
+      file: ./compose.templates.yml
+      service: es-coord-template
+    container_name: coord-2
+    environment:
+      node.name: coord-2
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-2/coord-2.crt
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/coord-2/coord-2.key
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-2/coord-2.crt
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/coord-2/coord-2.key
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs:ro
+    networks: [ esnet ]
+
+  # =========================
+  # HAPROXY #1
+  # =========================
+  haproxy-1:
+    image: haproxy:2.9
+    container_name: haproxy-1
+    restart: unless-stopped
+    ports:
+      - "29200:9200"
+      - "18404:8404"
+    volumes:
+      - ./haproxy/haproxy-1.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - coord-1
+      - coord-2
+    healthcheck:
+      test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [ esnet ]
+
+  # =========================
+  # HAPROXY #2
+  # =========================
+  haproxy-2:
+    image: haproxy:2.9
+    container_name: haproxy-2
+    restart: unless-stopped
+    ports:
+      - "29201:9200"
+      - "18405:8404"
+    volumes:
+      - ./haproxy/haproxy-2.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - coord-1
+      - coord-2
+    healthcheck:
+      test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [ esnet ]
+
+  # =========================
+  # KIBANA
+  # =========================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    container_name: kibana
+    restart: unless-stopped
+    depends_on:
+      setup-passwords:
+        condition: service_completed_successfully
+      haproxy-1:
+        condition: service_started
+      haproxy-2:
+        condition: service_started
+    environment:
+      SERVER_NAME: kibana
+      ELASTICSEARCH_HOSTS: '["https://haproxy-1:9200","https://haproxy-2:9200"]'
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_SYSTEM_PASSWORD}
+      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: /usr/share/kibana/config/certs/ca/ca.crt
+      ELASTICSEARCH_SSL_VERIFICATIONMODE: certificate
+      XPACK_SECURITY_ENABLED: "true"
+
+      # Kibana UI HTTPS
+      SERVER_SSL_ENABLED: "true"
+      SERVER_SSL_CERTIFICATE: /usr/share/kibana/config/certs/kibana/kibana.crt
+      SERVER_SSL_KEY: /usr/share/kibana/config/certs/kibana/kibana.key
+
+      XPACK_SECURITY_ENCRYPTIONKEY: ${KIBANA_SECURITY_ENCRYPTION_KEY}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTED_SAVED_OBJECTS_KEY}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_ENCRYPTION_KEY}
+
+      XPACK_REPORTING_ROLES_ENABLED: "false"
+    volumes:
+      - certs:/usr/share/kibana/config/certs:ro
+    ports:
+      - "15601:5601"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:5601/login >/dev/null || exit 1" ]
+      interval: 20s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks: [ esnet ]
+
+  # =========================
+  # ESRALLY
+  # =========================
+  rally:
+    image: python:3.11-slim
+    container_name: es-rally
+    restart: unless-stopped
+    working_dir: /work
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >
+      python -m pip install --no-cache-dir esrally &&
+      esrally --version &&
+      tail -f /dev/null
+    tty: true
+    stdin_open: true
+    volumes:
+      - rally-data:/root/.rally
+      - ./rally-work:/work
+      - certs:/certs:ro
+      - ./scripts:/scripts:ro
+    depends_on:
+      - haproxy-1
+      - haproxy-2
+    networks: [ esnet ]
+
+  toolbox:
+    image: alpine:3.20
+    container_name: es-toolbox
+    command: >
+      sh -c "
+      apk add --no-cache curl jq openssl bash apache2-utils &&
+      tail -f /dev/null
+      "
+    volumes:
+      - certs:/certs:ro
+      - ./scripts:/scripts
+    networks: [ esnet ]
+    depends_on:
+      - haproxy-1
+      - haproxy-2
+
+networks:
+  esnet:
+    driver: bridge
+
+volumes:
+  master1-data:
+  master2-data:
+  master3-data:
+  data1-data:
+  data2-data:
+  data3-data:
+  certs:
+  rally-data:

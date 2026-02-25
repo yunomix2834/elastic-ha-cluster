@@ -1,0 +1,28 @@
+instances:
+  - name: master-1
+    dns:
+      - master-1
+  - name: master-2
+    dns:
+      - master-2
+  - name: master-3
+    dns:
+      - master-3
+  - name: data-1
+    dns:
+      - data-1
+  - name: data-2
+    dns:
+      - data-2
+  - name: data-3
+    dns:
+      - data-3
+  - name: coord-1
+    dns:
+      - coord-1
+  - name: coord-2
+    dns:
+      - coord-2
+  - name: kibana
+    dns:
+      - kibana

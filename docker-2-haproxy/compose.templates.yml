@@ -1,0 +1,98 @@
+name: elastic_search_templates
+
+services:
+  # =========================
+  # TEMPLATE: common ES base
+  # =========================
+  es-common:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    restart: unless-stopped
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65535, hard: 65535 }
+    networks: [ esnet ]
+    environment:
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      network.host: 0.0.0.0
+      http.port: "9200"
+      transport.port: "9300"
+      bootstrap.memory_lock: "true"
+      node.store.allow_mmap: "false"
+
+      # Security + TLS
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+
+      # Transport TLS
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.verification_mode: certificate
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+
+      # HTTP TLS
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs:ro
+
+  # =========================
+  # TEMPLATE: master node
+  # =========================
+  es-master-template:
+    extends:
+      service: es-common
+    environment:
+      node.roles: master
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      # CHỈ bootstrap lần đầu; sau đó remove/comment ở file chính
+      cluster.initial_master_nodes: master-1,master-2,master-3
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:9200 >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  # =========================
+  # TEMPLATE: data node
+  # =========================
+  es-data-template:
+    extends:
+      service: es-common
+    environment:
+      node.roles: data,ingest
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:9200 >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  # =========================
+  # TEMPLATE: coordinating-only node
+  # =========================
+  es-coord-template:
+    extends:
+      service: es-common
+    environment:
+      node.roles: "[]"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:9200 >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+networks:
+  esnet:
+    name: esnet
+    driver: bridge
+
+volumes:
+  certs:
+    name: elastic_search_ha_proxy_certs
