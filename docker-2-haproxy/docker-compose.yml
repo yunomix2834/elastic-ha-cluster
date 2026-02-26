@@ -72,17 +72,7 @@ services:
     depends_on:
       setup-certs:
         condition: service_completed_successfully
-      master-1:
-        condition: service_started
-      master-2:
-        condition: service_started
-      master-3:
-        condition: service_started
       coord-1:
-        condition: service_started
-      coord-2:
-        condition: service_started
-      haproxy-1:
         condition: service_started
     environment:
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
@@ -92,22 +82,22 @@ services:
     command: >
       sh -c '
         set -eu
-
-        echo "[setup-passwords] Waiting for Elasticsearch via HAProxy..."
+  
+        echo "[setup-passwords] Waiting for Elasticsearch via coord-1..."
         until curl -sS --cacert /certs/ca/ca.crt \
           -u elastic:"$$ELASTIC_PASSWORD" \
-          https://haproxy-1:9200/_security/_authenticate >/dev/null; do
+          https://coord-1:9200/_security/_authenticate >/dev/null; do
           echo "[setup-passwords] ES not ready yet..."
           sleep 5
         done
-
+  
         echo "[setup-passwords] Setting kibana_system password..."
         curl -sS --fail --cacert /certs/ca/ca.crt \
           -u elastic:"$$ELASTIC_PASSWORD" \
           -H "Content-Type: application/json" \
-          -X POST https://haproxy-1:9200/_security/user/kibana_system/_password \
+          -X POST https://coord-1:9200/_security/user/kibana_system/_password \
           -d "{\"password\":\"$$KIBANA_SYSTEM_PASSWORD\"}"
-
+  
         echo
         echo "[setup-passwords] Done."
       '
