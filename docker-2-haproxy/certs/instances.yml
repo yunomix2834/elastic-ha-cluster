@@ -20,9 +20,13 @@ instances:
   - name: coord-1
     dns:
       - coord-1
+      - haproxy-1
+      - haproxy-2
   - name: coord-2
     dns:
       - coord-2
+      - haproxy-1
+      - haproxy-2
   - name: kibana
     dns:
       - kibana

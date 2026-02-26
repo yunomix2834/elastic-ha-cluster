@@ -1,3 +1,5 @@
+docker-compose.yml
+
 name: elastic_search_ha_proxy
 
 services:
@@ -82,7 +84,7 @@ services:
     command: >
       sh -c '
         set -eu
-  
+
         echo "[setup-passwords] Waiting for Elasticsearch via coord-1..."
         until curl -sS --cacert /certs/ca/ca.crt \
           -u elastic:"$$ELASTIC_PASSWORD" \
@@ -90,14 +92,14 @@ services:
           echo "[setup-passwords] ES not ready yet..."
           sleep 5
         done
-  
+
         echo "[setup-passwords] Setting kibana_system password..."
         curl -sS --fail --cacert /certs/ca/ca.crt \
           -u elastic:"$$ELASTIC_PASSWORD" \
           -H "Content-Type: application/json" \
           -X POST https://coord-1:9200/_security/user/kibana_system/_password \
           -d "{\"password\":\"$$KIBANA_SYSTEM_PASSWORD\"}"
-  
+
         echo
         echo "[setup-passwords] Done."
       '
@@ -383,3 +385,512 @@ volumes:
   data3-data:
   certs:
   rally-data:
+
+compose.templates.yml
+name: elastic_search_templates
+
+services:
+  # =========================
+  # TEMPLATE: common ES base
+  # =========================
+  es-common:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    restart: unless-stopped
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65535, hard: 65535 }
+    networks: [ esnet ]
+    environment:
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      network.host: 0.0.0.0
+      http.port: "9200"
+      transport.port: "9300"
+      bootstrap.memory_lock: "true"
+      node.store.allow_mmap: "false"
+
+      # Security + TLS
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+
+      # Transport TLS
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.verification_mode: certificate
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+
+      # HTTP TLS
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs:ro
+
+  # =========================
+  # TEMPLATE: master node
+  # =========================
+  es-master-template:
+    extends:
+      service: es-common
+    environment:
+      node.roles: master
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      # CHỈ bootstrap lần đầu; sau đó remove/comment ở file chính
+      cluster.initial_master_nodes: master-1,master-2,master-3
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:9200 >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  # =========================
+  # TEMPLATE: data node
+  # =========================
+  es-data-template:
+    extends:
+      service: es-common
+    environment:
+      node.roles: data,ingest
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:9200 >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  # =========================
+  # TEMPLATE: coordinating-only node
+  # =========================
+  es-coord-template:
+    extends:
+      service: es-common
+    environment:
+      node.roles: "[]"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sk https://localhost:9200 >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+networks:
+  esnet:
+    name: esnet
+    driver: bridge
+
+volumes:
+  certs:
+    name: elastic_search_ha_proxy_certs
+
+.env
+ELASTIC_PASSWORD=ElasticRoot@123
+
+KIBANA_SYSTEM_PASSWORD=KibanaSystem@123
+
+KIBANA_SECURITY_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
+KIBANA_ENCRYPTED_SAVED_OBJECTS_KEY=abcdef0123456789abcdef0123456789
+KIBANA_REPORTING_ENCRYPTION_KEY=fedcba9876543210fedcba9876543210
+
+certs/
+instances.yml
+instances:
+  - name: master-1
+    dns:
+      - master-1
+  - name: master-2
+    dns:
+      - master-2
+  - name: master-3
+    dns:
+      - master-3
+  - name: data-1
+    dns:
+      - data-1
+  - name: data-2
+    dns:
+      - data-2
+  - name: data-3
+    dns:
+      - data-3
+  - name: coord-1
+    dns:
+      - coord-1
+      - haproxy-1
+      - haproxy-2
+  - name: coord-2
+    dns:
+      - coord-2
+      - haproxy-1
+      - haproxy-2
+  - name: kibana
+    dns:
+      - kibana
+
+
+haproxy/
+haproxy-1.cfg
+global
+  maxconn 40000
+  log stdout format raw local0
+
+defaults
+  mode tcp
+  log global
+  option tcplog
+  timeout connect 5s
+  timeout client  5m
+  timeout server  5m
+  timeout check   3s
+
+frontend es_https
+  bind *:9200
+  default_backend es_coord_tls
+
+backend es_coord_tls
+  balance roundrobin
+  option tcp-check
+  tcp-check connect port 9200
+  default-server inter 2s fall 3 rise 2
+  server coord1 coord-1:9200 check
+  server coord2 coord-2:9200 check
+
+listen stats
+  bind *:8404
+  mode http
+  stats enable
+  stats uri /stats
+  stats refresh 5s
+  stats auth admin:HaProxySystem@123
+
+
+haproxy-2.cfg
+global
+  maxconn 40000
+  log stdout format raw local0
+
+defaults
+  mode tcp
+  log global
+  option tcplog
+  timeout connect 5s
+  timeout client  5m
+  timeout server  5m
+  timeout check   3s
+
+frontend es_https
+  bind *:9200
+  default_backend es_coord_tls
+
+backend es_coord_tls
+  balance roundrobin
+  option tcp-check
+  tcp-check connect port 9200
+  default-server inter 2s fall 3 rise 2
+  server coord1 coord-1:9200 check
+  server coord2 coord-2:9200 check
+
+listen stats
+  bind *:8404
+  mode http
+  stats enable
+  stats uri /stats
+  stats refresh 5s
+  stats auth admin:HaProxySystem@123
+
+
+rally-work/
+rally.ini
+[meta]
+config.version = 17
+
+[system]
+env.name = docker
+
+[track]
+repository = default
+
+[reporting]
+datastore.type = in-memory
+
+rally-entrypoint.sh
+#!/usr/bin/env sh
+set -eu
+
+echo "[rally] booting..."
+
+apt-get update
+apt-get install -y --no-install-recommends \
+  git ca-certificates curl dnsutils iputils-ping jq procps
+rm -rf /var/lib/apt/lists/*
+
+git config --global http.version HTTP/1.1 || true
+git config --global http.lowSpeedLimit 1 || true
+git config --global http.lowSpeedTime 300 || true
+
+python -m pip install --no-cache-dir --upgrade pip
+python -m pip install --no-cache-dir esrally
+
+echo "[rally] versions:"
+git --version
+curl --version | head -n 1
+/usr/local/bin/esrally --version
+
+echo "[rally] ready (sleeping)..."
+tail -f /dev/null
+
+
+scripts/
+00_smoke.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+ES_URL="${ES_URL:-https://haproxy-1:9200}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-ElasticRoot@123}"
+CA_CERT="${CA_CERT:-/certs/ca/ca.crt}"
+
+echo "[smoke] ES_URL=$ES_URL"
+
+curl -sS --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+  "$ES_URL" | jq .
+
+curl -sS --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+  "$ES_URL/_cluster/health?pretty" | jq .
+
+curl -sS --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+  "$ES_URL/_cat/nodes?v" | sed 's/^/[nodes] /'
+
+
+10_setup_index.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+ES_URL="${ES_URL:-https://haproxy-1:9200}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-ElasticRoot@123}"
+CA_CERT="${CA_CERT:-/certs/ca/ca.crt}"
+
+INDEX="${INDEX:-bench_docs}"
+SHARDS="${SHARDS:-3}"
+REPLICAS="${REPLICAS:-1}"
+
+echo "[setup] create index=$INDEX shards=$SHARDS replicas=$REPLICAS"
+
+curl -sS --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+  -X DELETE "$ES_URL/$INDEX" >/dev/null || true
+
+curl -sS --fail --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+  -H 'Content-Type: application/json' \
+  -X PUT "$ES_URL/$INDEX" -d "{
+    \"settings\": {
+      \"number_of_shards\": $SHARDS,
+      \"number_of_replicas\": $REPLICAS,
+      \"refresh_interval\": \"1s\"
+    },
+    \"mappings\": {
+      \"properties\": {
+        \"ts\": {\"type\": \"date\"},
+        \"user\": {\"type\": \"keyword\"},
+        \"msg\": {\"type\": \"text\"},
+        \"value\": {\"type\": \"double\"}
+      }
+    }
+  }" | jq .
+
+echo "[setup] done"
+
+20_bulk_load.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+ES_URL="${ES_URL:-https://haproxy-1:9200}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-ElasticRoot@123}"
+CA_CERT="${CA_CERT:-/certs/ca/ca.crt}"
+
+INDEX="${INDEX:-bench_docs}"
+
+# knobs
+BULK_DOCS="${BULK_DOCS:-1000}"          # docs per bulk request
+BULK_ITERS="${BULK_ITERS:-50}"          # number of bulk requests
+MSG_SIZE="${MSG_SIZE:-200}"             # chars in msg
+SLEEP_BETWEEN="${SLEEP_BETWEEN:-0}"     # seconds
+
+tmp="$(mktemp)"
+bulk_body="$(mktemp)"
+
+gen_msg() {
+  # generate pseudo text length MSG_SIZE
+  head -c "$MSG_SIZE" /dev/urandom | base64 | tr -d '\n' | head -c "$MSG_SIZE"
+}
+
+echo "[bulk] index=$INDEX docs_per_bulk=$BULK_DOCS iters=$BULK_ITERS msg_size=$MSG_SIZE"
+
+# prepare one bulk payload template (ndjson)
+: > "$bulk_body"
+for i in $(seq 1 "$BULK_DOCS"); do
+  echo "{\"index\":{\"_index\":\"$INDEX\"}}" >> "$bulk_body"
+  m="$(gen_msg)"
+  # simple doc
+  echo "{\"ts\":\"$(date -Iseconds)\",\"user\":\"u$((RANDOM%100))\",\"value\":$((RANDOM%10000))/100,\"msg\":\"$m\"}" >> "$bulk_body"
+done
+
+total_docs=0
+ok_reqs=0
+err_reqs=0
+sum_ms=0
+min_ms=999999
+max_ms=0
+start_all=$(date +%s%3N)
+
+for iter in $(seq 1 "$BULK_ITERS"); do
+  t0=$(date +%s%3N)
+  http_code=$(curl -sS -o "$tmp" -w "%{http_code}" \
+    --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+    -H 'Content-Type: application/x-ndjson' \
+    -X POST "$ES_URL/_bulk?refresh=false" \
+    --data-binary @"$bulk_body" || true)
+  t1=$(date +%s%3N)
+  dt=$((t1-t0))
+
+  if (( dt < min_ms )); then min_ms=$dt; fi
+  if (( dt > max_ms )); then max_ms=$dt; fi
+  sum_ms=$((sum_ms+dt))
+
+  if [[ "$http_code" != "200" ]]; then
+    err_reqs=$((err_reqs+1))
+    echo "[bulk][$iter] HTTP $http_code dt=${dt}ms"
+  else
+    # check bulk errors field
+    has_errors=$(jq -r '.errors' "$tmp" 2>/dev/null || echo "true")
+    if [[ "$has_errors" == "true" ]]; then
+      err_reqs=$((err_reqs+1))
+      echo "[bulk][$iter] BULK_ERRORS dt=${dt}ms"
+      jq '.items[0]' "$tmp" >/dev/null 2>&1 || true
+    else
+      ok_reqs=$((ok_reqs+1))
+      total_docs=$((total_docs+BULK_DOCS))
+      echo "[bulk][$iter] OK dt=${dt}ms"
+    fi
+  fi
+
+  if [[ "$SLEEP_BETWEEN" != "0" ]]; then sleep "$SLEEP_BETWEEN"; fi
+done
+
+end_all=$(date +%s%3N)
+wall_ms=$((end_all-start_all))
+wall_s=$(python3 - <<PY
+print(${wall_ms}/1000)
+PY
+)
+
+avg_ms=$(python3 - <<PY
+ok=${ok_reqs}+${err_reqs}
+print(round(${sum_ms}/max(ok,1),2))
+PY
+)
+
+docs_per_s=$(python3 - <<PY
+docs=${total_docs}
+sec=${wall_ms}/1000
+print(round(docs/max(sec,0.001),2))
+PY
+)
+
+echo
+echo "===== BULK SUMMARY ====="
+echo "total_docs=$total_docs"
+echo "requests_ok=$ok_reqs requests_err=$err_reqs"
+echo "latency_ms avg=$avg_ms min=$min_ms max=$max_ms"
+echo "wall_s=$wall_s docs_per_s=$docs_per_s"
+echo "========================"
+
+30_search_warmup.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+ES_URL="${ES_URL:-https://haproxy-1:9200}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-ElasticRoot@123}"
+CA_CERT="${CA_CERT:-/certs/ca/ca.crt}"
+INDEX="${INDEX:-bench_docs}"
+
+curl -sS --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+  -H 'Content-Type: application/json' \
+  -X POST "$ES_URL/$INDEX/_search" -d '{
+    "size": 10,
+    "query": {"match": {"msg": "a"}}
+  }' >/dev/null
+
+echo "[warmup] done"
+
+31_ab_search.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOST="${HOST:-haproxy-1}"
+PORT="${PORT:-9200}"
+INDEX="${INDEX:-bench_docs}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-ElasticRoot@123}"
+
+N="${N:-20000}"
+C="${C:-200}"
+KEEPALIVE="${KEEPALIVE:-true}"
+TIMEOUT="${TIMEOUT:-120}"     # NEW
+VERBOSE="${VERBOSE:-0}"       # NEW (0/1)
+
+auth="$(printf "%s:%s" "$ES_USER" "$ES_PASS" | base64 -w0)"
+
+cat > /tmp/search.json <<'JSON'
+{"size":10,"track_total_hits":false,"query":{"match":{"msg":"a"}}}
+JSON
+
+ka_flag=""
+[[ "$KEEPALIVE" == "true" ]] && ka_flag="-k"
+
+v_flag=""
+[[ "$VERBOSE" == "1" ]] && v_flag="-v 2"
+
+echo "[ab] N=$N C=$C timeout=${TIMEOUT}s keepalive=$KEEPALIVE target=https://$HOST:$PORT/$INDEX/_search"
+
+ab $v_flag $ka_flag -s "$TIMEOUT" -n "$N" -c "$C" \
+  -T "application/json" \
+  -H "Authorization: Basic $auth" \
+  -p /tmp/search.json \
+  "https://$HOST:$PORT/$INDEX/_search"
+
+40_collect_metrics.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+ES_URL="${ES_URL:-https://haproxy-1:9200}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-ElasticRoot@123}"
+CA_CERT="${CA_CERT:-/certs/ca/ca.crt}"
+OUT_DIR="${OUT_DIR:-/tmp/es-metrics}"
+
+mkdir -p "$OUT_DIR"
+ts="$(date +%F_%H%M%S)"
+
+req() {
+  local path="$1"
+  local out="$2"
+  curl -sS --cacert "$CA_CERT" -u "$ES_USER:$ES_PASS" \
+    "$ES_URL$path" > "$out"
+  echo "[metrics] wrote $out"
+}
+
+req "/_cluster/health"            "$OUT_DIR/${ts}_health.json"
+req "/_cat/nodes?v&h=name,ip,role,heap.percent,ram.percent,cpu,load_1m,master" "$OUT_DIR/${ts}_nodes.txt"
+req "/_nodes/stats/jvm,process,os,thread_pool,fs,indices" "$OUT_DIR/${ts}_nodes_stats.json"
+req "/_stats?pretty"              "$OUT_DIR/${ts}_indices_stats.json"
+req "/_cat/thread_pool?v"         "$OUT_DIR/${ts}_thread_pool.txt"
+req "/_cat/shards?v"              "$OUT_DIR/${ts}_shards.txt"
+
+echo "[metrics] all done -> $OUT_DIR"
+
