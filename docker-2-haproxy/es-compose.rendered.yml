@@ -1,0 +1,786 @@
+name: elastic_search_ha_proxy
+services:
+  coord-1:
+    container_name: coord-1
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      bootstrap.memory_lock: "true"
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: coord-1
+      node.roles: '[]'
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-1/coord-1.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/coord-1/coord-1.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-1/coord-1.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/coord-1/coord-1.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+  coord-2:
+    container_name: coord-2
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      bootstrap.memory_lock: "true"
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: coord-2
+      node.roles: '[]'
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-2/coord-2.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/coord-2/coord-2.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/coord-2/coord-2.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/coord-2/coord-2.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+  data-1:
+    container_name: data-1
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+      bootstrap.memory_lock: "true"
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: data-1
+      node.roles: data,ingest
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/data-1/data-1.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/data-1/data-1.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/data-1/data-1.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/data-1/data-1.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+      - type: volume
+        source: data1-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  data-2:
+    container_name: data-2
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+      bootstrap.memory_lock: "true"
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: data-2
+      node.roles: data,ingest
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/data-2/data-2.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/data-2/data-2.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/data-2/data-2.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/data-2/data-2.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+      - type: volume
+        source: data2-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  data-3:
+    container_name: data-3
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+      bootstrap.memory_lock: "true"
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: data-3
+      node.roles: data,ingest
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/data-3/data-3.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/data-3/data-3.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/data-3/data-3.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/data-3/data-3.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+      - type: volume
+        source: data3-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  haproxy-1:
+    container_name: haproxy-1
+    depends_on:
+      coord-1:
+        condition: service_started
+        required: true
+      coord-2:
+        condition: service_started
+        required: true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg || exit 1
+      timeout: 3s
+      interval: 10s
+      retries: 10
+    image: haproxy:2.9
+    networks:
+      esnet: null
+    ports:
+      - mode: ingress
+        target: 9200
+        published: "29200"
+        protocol: tcp
+      - mode: ingress
+        target: 8404
+        published: "18404"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /home/yunomix2834/PycharmProjects/elastic-ha-cluster/docker-2-haproxy/haproxy/haproxy-1.cfg
+        target: /usr/local/etc/haproxy/haproxy.cfg
+        read_only: true
+        bind:
+          create_host_path: true
+  haproxy-2:
+    container_name: haproxy-2
+    depends_on:
+      coord-1:
+        condition: service_started
+        required: true
+      coord-2:
+        condition: service_started
+        required: true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg || exit 1
+      timeout: 3s
+      interval: 10s
+      retries: 10
+    image: haproxy:2.9
+    networks:
+      esnet: null
+    ports:
+      - mode: ingress
+        target: 9200
+        published: "29201"
+        protocol: tcp
+      - mode: ingress
+        target: 8404
+        published: "18405"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /home/yunomix2834/PycharmProjects/elastic-ha-cluster/docker-2-haproxy/haproxy/haproxy-2.cfg
+        target: /usr/local/etc/haproxy/haproxy.cfg
+        read_only: true
+        bind:
+          create_host_path: true
+  kibana:
+    container_name: kibana
+    depends_on:
+      haproxy-1:
+        condition: service_started
+        required: true
+      haproxy-2:
+        condition: service_started
+        required: true
+      setup-passwords:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTICSEARCH_HOSTS: '["https://haproxy-1:9200","https://haproxy-2:9200"]'
+      ELASTICSEARCH_PASSWORD: KibanaSystem@123
+      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: /usr/share/kibana/config/certs/ca/ca.crt
+      ELASTICSEARCH_SSL_VERIFICATIONMODE: certificate
+      ELASTICSEARCH_USERNAME: kibana_system
+      SERVER_NAME: kibana
+      SERVER_SSL_CERTIFICATE: /usr/share/kibana/config/certs/kibana/kibana.crt
+      SERVER_SSL_ENABLED: "true"
+      SERVER_SSL_KEY: /usr/share/kibana/config/certs/kibana/kibana.key
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: abcdef0123456789abcdef0123456789
+      XPACK_REPORTING_ENCRYPTIONKEY: fedcba9876543210fedcba9876543210
+      XPACK_REPORTING_ROLES_ENABLED: "false"
+      XPACK_SECURITY_ENABLED: "true"
+      XPACK_SECURITY_ENCRYPTIONKEY: 0123456789abcdef0123456789abcdef
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:5601/login >/dev/null || exit 1
+      timeout: 5s
+      interval: 20s
+      retries: 20
+      start_period: 1m0s
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    networks:
+      esnet: null
+    ports:
+      - mode: ingress
+        target: 5601
+        published: "15601"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/kibana/config/certs
+        read_only: true
+        volume: {}
+  master-1:
+    container_name: master-1
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      bootstrap.memory_lock: "true"
+      cluster.initial_master_nodes: master-1,master-2,master-3
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: master-1
+      node.roles: master
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/master-1/master-1.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/master-1/master-1.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/master-1/master-1.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/master-1/master-1.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+      - type: volume
+        source: master1-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  master-2:
+    container_name: master-2
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      bootstrap.memory_lock: "true"
+      cluster.initial_master_nodes: master-1,master-2,master-3
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: master-2
+      node.roles: master
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/master-2/master-2.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/master-2/master-2.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/master-2/master-2.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/master-2/master-2.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+      - type: volume
+        source: master2-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  master-3:
+    container_name: master-3
+    depends_on:
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      bootstrap.memory_lock: "true"
+      cluster.initial_master_nodes: master-1,master-2,master-3
+      cluster.name: es-ha
+      discovery.seed_hosts: master-1,master-2,master-3
+      http.port: "9200"
+      network.host: 0.0.0.0
+      node.name: master-3
+      node.roles: master
+      node.store.allow_mmap: "false"
+      transport.port: "9300"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.certificate: /usr/share/elasticsearch/config/certs/master-3/master-3.crt
+      xpack.security.http.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: /usr/share/elasticsearch/config/certs/master-3/master-3.key
+      xpack.security.transport.ssl.certificate: /usr/share/elasticsearch/config/certs/master-3/master-3.crt
+      xpack.security.transport.ssl.certificate_authorities: /usr/share/elasticsearch/config/certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.key: /usr/share/elasticsearch/config/certs/master-3/master-3.key
+      xpack.security.transport.ssl.verification_mode: certificate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk https://localhost:9200 >/dev/null || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 20
+      start_period: 40s
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        read_only: true
+        volume: {}
+      - type: volume
+        source: master3-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  rally:
+    container_name: es-rally
+    depends_on:
+      haproxy-1:
+        condition: service_started
+        required: true
+      haproxy-2:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /bin/sh
+      - /work/rally-entrypoint.sh
+    environment:
+      GIT_TERMINAL_PROMPT: "0"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    image: python:3.11
+    networks:
+      esnet: null
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: volume
+        source: rally-data
+        target: /root/.rally
+        volume: {}
+      - type: bind
+        source: /home/yunomix2834/PycharmProjects/elastic-ha-cluster/docker-2-haproxy/rally-work
+        target: /work
+        bind:
+          create_host_path: true
+      - type: volume
+        source: certs
+        target: /certs
+        read_only: true
+        volume: {}
+      - type: bind
+        source: /home/yunomix2834/PycharmProjects/elastic-ha-cluster/docker-2-haproxy/scripts
+        target: /scripts
+        read_only: true
+        bind:
+          create_host_path: true
+    working_dir: /work
+  setup-certs:
+    command:
+      - bash
+      - -c
+      - |2
+
+          set -euo pipefail
+          CERTS_DIR=/usr/share/elasticsearch/config/certs
+          CA_ZIP="$$CERTS_DIR/ca.zip"
+          CERTS_ZIP="$$CERTS_DIR/certs.zip"
+
+          mkdir -p "$$CERTS_DIR"
+          cd "$$CERTS_DIR"
+
+          # cleanup zip rác từ lần chạy fail trước (nếu có)
+          rm -f "$$CA_ZIP" "$$CERTS_ZIP"
+
+          if [ ! -f ca/ca.crt ]; then
+            echo "[setup-certs] Generating CA..."
+            mkdir -p ca
+
+            /usr/share/elasticsearch/bin/elasticsearch-certutil ca \
+              --silent --pem \
+              -out "$$CA_ZIP"
+
+            test -f "$$CA_ZIP"
+            unzip -o "$$CA_ZIP" -d ca_tmp
+            cp ca_tmp/ca/ca.crt ca/ca.crt
+            cp ca_tmp/ca/ca.key ca/ca.key
+            rm -rf ca_tmp "$$CA_ZIP"
+          else
+            echo "[setup-certs] CA already exists, skipping."
+          fi
+
+          if [ ! -f master-1/master-1.crt ]; then
+            echo "[setup-certs] Generating node certs from /tmp/instances.yml ..."
+
+            /usr/share/elasticsearch/bin/elasticsearch-certutil cert \
+              --silent --pem \
+              --in /tmp/instances.yml \
+              --ca-cert "$$CERTS_DIR/ca/ca.crt" \
+              --ca-key "$$CERTS_DIR/ca/ca.key" \
+              -out "$$CERTS_ZIP"
+
+            test -f "$$CERTS_ZIP"
+            unzip -o "$$CERTS_ZIP" -d .
+            rm -f "$$CERTS_ZIP"
+          else
+            echo "[setup-certs] Node certs already exist, skipping."
+          fi
+
+          chown -R 1000:0 "$$CERTS_DIR"
+          find "$$CERTS_DIR" -type d -exec chmod 750 {} \;
+          find "$$CERTS_DIR" -type f -exec chmod 640 {} \;
+
+          echo "[setup-certs] Done."
+    container_name: setup-certs
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    networks:
+      esnet: null
+    restart: "no"
+    user: "0"
+    volumes:
+      - type: volume
+        source: certs
+        target: /usr/share/elasticsearch/config/certs
+        volume: {}
+      - type: bind
+        source: /home/yunomix2834/PycharmProjects/elastic-ha-cluster/docker-2-haproxy/certs/instances.yml
+        target: /tmp/instances.yml
+        read_only: true
+        bind:
+          create_host_path: true
+  setup-passwords:
+    command:
+      - sh
+      - -c
+      - |2
+
+          set -eu
+
+          echo "[setup-passwords] Waiting for Elasticsearch via coord-1..."
+          until curl -sS --cacert /certs/ca/ca.crt \
+            -u elastic:"$$ELASTIC_PASSWORD" \
+            https://coord-1:9200/_security/_authenticate >/dev/null; do
+            echo "[setup-passwords] ES not ready yet..."
+            sleep 5
+          done
+
+          echo "[setup-passwords] Setting kibana_system password..."
+          curl -sS --fail --cacert /certs/ca/ca.crt \
+            -u elastic:"$$ELASTIC_PASSWORD" \
+            -H "Content-Type: application/json" \
+            -X POST https://coord-1:9200/_security/user/kibana_system/_password \
+            -d "{\"password\":\"$$KIBANA_SYSTEM_PASSWORD\"}"
+
+          echo
+          echo "[setup-passwords] Done."
+    container_name: setup-passwords
+    depends_on:
+      coord-1:
+        condition: service_started
+        required: true
+      setup-certs:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ELASTIC_PASSWORD: ElasticRoot@123
+      KIBANA_SYSTEM_PASSWORD: KibanaSystem@123
+    image: curlimages/curl:8.6.0
+    networks:
+      esnet: null
+    restart: "no"
+    user: "0"
+    volumes:
+      - type: volume
+        source: certs
+        target: /certs
+        read_only: true
+        volume: {}
+  toolbox:
+    command:
+      - sh
+      - -c
+      - ' apk add --no-cache curl jq openssl bash apache2-utils && tail -f /dev/null '
+    container_name: es-toolbox
+    depends_on:
+      haproxy-1:
+        condition: service_started
+        required: true
+      haproxy-2:
+        condition: service_started
+        required: true
+    image: alpine:3.20
+    networks:
+      esnet: null
+    volumes:
+      - type: volume
+        source: certs
+        target: /certs
+        read_only: true
+        volume: {}
+      - type: bind
+        source: /home/yunomix2834/PycharmProjects/elastic-ha-cluster/docker-2-haproxy/scripts
+        target: /scripts
+        bind:
+          create_host_path: true
+networks:
+  esnet:
+    name: elastic_search_ha_proxy_esnet
+    driver: bridge
+volumes:
+  certs:
+    name: elastic_search_ha_proxy_certs
+  data1-data:
+    name: elastic_search_ha_proxy_data1-data
+  data2-data:
+    name: elastic_search_ha_proxy_data2-data
+  data3-data:
+    name: elastic_search_ha_proxy_data3-data
+  master1-data:
+    name: elastic_search_ha_proxy_master1-data
+  master2-data:
+    name: elastic_search_ha_proxy_master2-data
+  master3-data:
+    name: elastic_search_ha_proxy_master3-data
+  rally-data:
+    name: elastic_search_ha_proxy_rally-data

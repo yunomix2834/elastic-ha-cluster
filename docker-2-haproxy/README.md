@@ -1,3 +1,4 @@
+### Chaỵ Docker
 ```shell
 chmod +x rally-work/rally-entrypoint.sh
 ```
@@ -8,6 +9,15 @@ docker compose up -d
 docker compose ps
 ```
 
+Nếu kibana bị lỗi thì chạy lại
+```shell
+docker compose up -d
+```
+
+Tài khoản mật khẩu admin mặc định là elastic/ElasticRoot@123, có thể thay đổi trong file docker-compose.yml
+Cổng kibana: https://localhost:15601
+
+### Test tải, đọc metrics
 Check dependencies trong es-rally
 ```shell
 docker compose exec rally sh -lc '
